@@ -10,7 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS")
-SERVER_PORT = os.getenv("SERVER_PORT", "34622")
+SERVER_PORT = os.getenv("SERVER_PORT", "26104")
 STATUS_CHANNEL_ID = int(os.getenv("STATUS_CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
@@ -18,49 +18,80 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-last_state = None
+status_message = None
+
+
+async def get_server_status():
+    try:
+        server = BedrockServer.lookup(
+            f"{SERVER_ADDRESS}:{SERVER_PORT}"
+        )
+
+        status = await server.async_status()
+
+        return {
+            "online": True,
+            "players": status.players_online,
+            "max_players": getattr(status, "players_max", "?"),
+            "player_names": []
+        }
+
+    except Exception:
+        return {
+            "online": False
+        }
 
 
 async def monitor_server():
-    global last_state
+    global status_message
 
     await client.wait_until_ready()
 
     channel = client.get_channel(STATUS_CHANNEL_ID)
 
+    if not channel:
+        return
+
     while not client.is_closed():
-        try:
-            server = BedrockServer.lookup(
-                f"{SERVER_ADDRESS}:{SERVER_PORT}"
+
+        data = await get_server_status()
+
+        if data["online"]:
+
+            content = (
+                "🟢 **SERVER ONLINE**\n\n"
+                f"👥 Players: {data['players']}/{data['max_players']}\n"
+                f"🌍 `{SERVER_ADDRESS}`\n"
+                f"🔌 `{SERVER_PORT}`"
             )
 
-            status = await server.async_status()
+        else:
 
-            current_state = "online"
+            content = (
+                "🔴 **SERVER OFFLINE**\n\n"
+                f"🌍 `{SERVER_ADDRESS}`\n"
+                f"🔌 `{SERVER_PORT}`"
+            )
 
-            if last_state != current_state and channel:
-                await channel.send(
-                    f"🟢 **Server Online**\n"
-                    f"👥 Players: {status.players_online}"
-                )
+        try:
 
-            last_state = current_state
+            if status_message is None:
+
+                status_message = await channel.send(content)
+
+            else:
+
+                await status_message.edit(content=content)
 
         except Exception:
-            current_state = "offline"
-
-            if last_state != current_state and channel:
-                await channel.send(
-                    "🔴 **Server Offline**"
-                )
-
-            last_state = current_state
+            pass
 
         await asyncio.sleep(60)
 
 
 @client.event
 async def on_ready():
+
     print(f"Logged in as {client.user}")
 
     try:
@@ -73,63 +104,47 @@ async def on_ready():
 
 
 @tree.command(
-    name="status",
-    description="Check Minecraft server status"
-)
-async def status(interaction: discord.Interaction):
-    try:
-        server = BedrockServer.lookup(
-            f"{SERVER_ADDRESS}:{SERVER_PORT}"
-        )
-
-        result = await server.async_status()
-
-        await interaction.response.send_message(
-            f"🟢 **Server Online**\n"
-            f"👥 Players: {result.players_online}\n"
-            f"🌐 Address: `{SERVER_ADDRESS}`\n"
-            f"🔌 Port: `{SERVER_PORT}`"
-        )
-
-    except Exception:
-        await interaction.response.send_message(
-            f"🔴 **Server Offline**\n"
-            f"🌐 Address: `{SERVER_ADDRESS}`\n"
-            f"🔌 Port: `{SERVER_PORT}`"
-        )
-
-
-@tree.command(
-    name="players",
-    description="Show online player count"
-)
-async def players(interaction: discord.Interaction):
-    try:
-        server = BedrockServer.lookup(
-            f"{SERVER_ADDRESS}:{SERVER_PORT}"
-        )
-
-        result = await server.async_status()
-
-        await interaction.response.send_message(
-            f"👥 Players Online: **{result.players_online}**"
-        )
-
-    except Exception:
-        await interaction.response.send_message(
-            "🔴 Server Offline"
-        )
-
-
-@tree.command(
     name="ip",
-    description="Show server IP and port"
+    description="Show server information"
 )
 async def ip(interaction: discord.Interaction):
+
+    data = await get_server_status()
+
+    if data["online"]:
+        status = "🟢 Online"
+    else:
+        status = "🔴 Offline"
+
     await interaction.response.send_message(
-        f"🌐 **Server Information**\n"
-        f"Address: `{SERVER_ADDRESS}`\n"
-        f"Port: `{SERVER_PORT}`"
+        f"{status}\n\n"
+        f"🌍 Address: `{SERVER_ADDRESS}`\n"
+        f"🔌 Port: `{SERVER_PORT}`"
+    )
+
+
+@tree.command(
+    name="status",
+    description="Show detailed server status"
+)
+async def status(interaction: discord.Interaction):
+
+    data = await get_server_status()
+
+    if not data["online"]:
+
+        await interaction.response.send_message(
+            "🔴 **Server Offline**"
+        )
+
+        return
+
+    player_text = "No player list available"
+
+    await interaction.response.send_message(
+        f"🟢 **Server Online**\n\n"
+        f"👥 Players: {data['players']}/{data['max_players']}\n\n"
+        f"{player_text}"
     )
 
 
@@ -138,11 +153,11 @@ async def ip(interaction: discord.Interaction):
     description="Show commands"
 )
 async def help_command(interaction: discord.Interaction):
+
     await interaction.response.send_message(
-        "**Available Commands**\n"
+        "**Tetrios Commands**\n\n"
+        "🌍 /ip\n"
         "📊 /status\n"
-        "👥 /players\n"
-        "🌐 /ip\n"
         "❓ /help"
     )
 
