@@ -10,7 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS")
-STATUS_CHANNEL_ID = int(os.getenv("STATUS_CHANNEL_ID"))
+STATUS_CHANNEL_ID = int(os.getenv("STATUS_CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
 
