@@ -10,6 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS")
+SERVER_PORT = os.getenv("SERVER_PORT", "34622")
 STATUS_CHANNEL_ID = int(os.getenv("STATUS_CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
@@ -29,15 +30,18 @@ async def monitor_server():
 
     while not client.is_closed():
         try:
-            server = BedrockServer.lookup(SERVER_ADDRESS)
+            server = BedrockServer.lookup(
+                f"{SERVER_ADDRESS}:{SERVER_PORT}"
+            )
+
             status = await server.async_status()
 
             current_state = "online"
 
-            if last_state != current_state:
+            if last_state != current_state and channel:
                 await channel.send(
                     f"🟢 **Server Online**\n"
-                    f"Players: {status.players_online}"
+                    f"👥 Players: {status.players_online}"
                 )
 
             last_state = current_state
@@ -45,7 +49,7 @@ async def monitor_server():
         except Exception:
             current_state = "offline"
 
-            if last_state != current_state:
+            if last_state != current_state and channel:
                 await channel.send(
                     "🔴 **Server Offline**"
                 )
@@ -74,28 +78,58 @@ async def on_ready():
 )
 async def status(interaction: discord.Interaction):
     try:
-        server = BedrockServer.lookup(SERVER_ADDRESS)
+        server = BedrockServer.lookup(
+            f"{SERVER_ADDRESS}:{SERVER_PORT}"
+        )
+
         result = await server.async_status()
 
         await interaction.response.send_message(
-            f"🟢 **Online**\n"
-            f"Players: {result.players_online}\n"
-            f"Address: `{SERVER_ADDRESS}`"
+            f"🟢 **Server Online**\n"
+            f"👥 Players: {result.players_online}\n"
+            f"🌐 Address: `{SERVER_ADDRESS}`\n"
+            f"🔌 Port: `{SERVER_PORT}`"
         )
 
     except Exception:
         await interaction.response.send_message(
-            "🔴 **Server Offline**"
+            f"🔴 **Server Offline**\n"
+            f"🌐 Address: `{SERVER_ADDRESS}`\n"
+            f"🔌 Port: `{SERVER_PORT}`"
+        )
+
+
+@tree.command(
+    name="players",
+    description="Show online player count"
+)
+async def players(interaction: discord.Interaction):
+    try:
+        server = BedrockServer.lookup(
+            f"{SERVER_ADDRESS}:{SERVER_PORT}"
+        )
+
+        result = await server.async_status()
+
+        await interaction.response.send_message(
+            f"👥 Players Online: **{result.players_online}**"
+        )
+
+    except Exception:
+        await interaction.response.send_message(
+            "🔴 Server Offline"
         )
 
 
 @tree.command(
     name="ip",
-    description="Show server address"
+    description="Show server IP and port"
 )
 async def ip(interaction: discord.Interaction):
     await interaction.response.send_message(
-        f"🌐 `{SERVER_ADDRESS}`"
+        f"🌐 **Server Information**\n"
+        f"Address: `{SERVER_ADDRESS}`\n"
+        f"Port: `{SERVER_PORT}`"
     )
 
 
@@ -106,9 +140,10 @@ async def ip(interaction: discord.Interaction):
 async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(
         "**Available Commands**\n"
-        "/status\n"
-        "/ip\n"
-        "/help"
+        "📊 /status\n"
+        "👥 /players\n"
+        "🌐 /ip\n"
+        "❓ /help"
     )
 
 
